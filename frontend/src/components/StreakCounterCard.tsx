@@ -26,21 +26,35 @@ export const StreakCounterCard: React.FC<StreakCounterCardProps> = ({
 
   const handleCheckin = async () => {
     setLoading(true);
-    try {
-      await api.post("/streaks/checkin", { note });
-      
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ["#10b981", "#6ee7b7", "#06b6d4", "#f97316", "#a855f7"],
-      });
+    const todayStr = new Date().toISOString().split("T")[0];
 
-      setShowNoteInput(false);
-      setNote("");
+    // Optimistic local persistence
+    try {
+      const savedDates: string[] = JSON.parse(localStorage.getItem("devbloom_checkin_dates") || "[]");
+      if (!savedDates.includes(todayStr)) {
+        const updated = [...savedDates, todayStr];
+        localStorage.setItem("devbloom_checkin_dates", JSON.stringify(updated));
+      }
+    } catch {
+      // ignore
+    }
+
+    confetti({
+      particleCount: 90,
+      spread: 75,
+      origin: { y: 0.6 },
+      colors: ["#10b981", "#3b82f6", "#f59e0b", "#d946ef", "#a855f7"],
+    });
+
+    setShowNoteInput(false);
+    setNote("");
+    onCheckinSuccess();
+
+    try {
+      await api.post("/streaks/checkin", { note: note.trim() });
       onCheckinSuccess();
     } catch (err) {
-      console.error("Checkin failed:", err);
+      console.warn("Backend checkin sync warning:", err);
     } finally {
       setLoading(false);
     }
