@@ -5,11 +5,18 @@
 </p>
 
 <p align="center">
+  <a href="https://bootcamp-r0i8.onrender.com" target="_blank">
+    <img src="https://img.shields.io/badge/Render-Live_Demo-46E3B7?style=for-the-badge&logo=render&logoColor=white" alt="Render Live Demo" />
+  </a>
   <img src="https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/Python_3.13-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Python_3.11-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
+</p>
+
+<p align="center">
+  🚀 <strong>Live Deployment:</strong> <a href="https://bootcamp-r0i8.onrender.com" target="_blank">https://bootcamp-r0i8.onrender.com</a>
 </p>
 
 ---
