@@ -1,48 +1,36 @@
 import React, { useEffect, useState } from "react";
-import { Map, CheckCircle2, Circle, Sparkles, Clock, Cpu, Layers, Code2, ChevronDown, ChevronUp, Calendar as CalendarIcon, ListFilter, Grid, CheckSquare, Eye, X, ExternalLink } from "lucide-react";
+import { Map, CheckCircle2, Circle, Clock, Cpu, Layers, Code2, ChevronDown, ChevronUp, Calendar as CalendarIcon, ListFilter, Grid, Eye, X, ExternalLink } from "lucide-react";
 import confetti from "canvas-confetti";
 import api from "../services/api";
-
-interface DailyTaskItem {
-  day: number;
-  week: number;
-  phase: number;
-  phase_title: string;
-  title: string;
-  ai_eng_task: string;
-  full_stack_task: string;
-  dsa_task: string;
-  checkpoint_step: string;
-}
-
-interface WeekItem {
-  week: number;
-  ai_eng: string;
-  full_stack: string;
-  dsa: string;
-  checkpoint: string;
-}
-
-interface PhaseItem {
-  phase: number;
-  phase_title: string;
-  weeks_range: string;
-  goal: string;
-  weeks: WeekItem[];
-}
+import { PHASES_DATA, generateStaticDailyTasks, type DailyTaskItem, type PhaseItem } from "../data/curriculumData";
 
 export const RoadmapPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<"calendar" | "daily" | "weekly">("calendar");
-  const [phases, setPhases] = useState<PhaseItem[]>([]);
-  const [dailyTasks, setDailyTasks] = useState<DailyTaskItem[]>([]);
-  const [completedWeeks, setCompletedWeeks] = useState<number[]>([]);
-  const [completedDays, setCompletedDays] = useState<number[]>([]);
+  const [phases, setPhases] = useState<PhaseItem[]>(PHASES_DATA);
+  const [dailyTasks, setDailyTasks] = useState<DailyTaskItem[]>(() => generateStaticDailyTasks());
   
-  const [weekProgressPercentage, setWeekProgressPercentage] = useState<number>(0);
-  const [dayProgressPercentage, setDayProgressPercentage] = useState<number>(0);
-  const [completedCount, setCompletedCount] = useState<number>(0);
-  const [completedDaysCount, setCompletedDaysCount] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+  const [completedWeeks, setCompletedWeeks] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem("devbloom_completed_weeks");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [completedDays, setCompletedDays] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem("devbloom_completed_days");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  
+  const [weekProgressPercentage, setWeekProgressPercentage] = useState<number>(() => Math.round((completedWeeks.length / 26) * 100));
+  const [dayProgressPercentage, setDayProgressPercentage] = useState<number>(() => Math.round((completedDays.length / 156) * 100));
+  const [completedCount, setCompletedCount] = useState<number>(() => completedWeeks.length);
+  const [completedDaysCount, setCompletedDaysCount] = useState<number>(() => completedDays.length);
   
   const [selectedPhaseFilter, setSelectedPhaseFilter] = useState<number>(0); // 0 = all
   const [selectedDayDetail, setSelectedDayDetail] = useState<DailyTaskItem | null>(null);
@@ -51,26 +39,33 @@ export const RoadmapPage: React.FC = () => {
   });
 
   const fetchData = async () => {
-    setLoading(true);
     try {
       const [weeklyRes, dailyRes] = await Promise.all([
-        api.get("/roadmap/"),
-        api.get("/roadmap/days"),
+        api.get("/roadmap/").catch(() => null),
+        api.get("/roadmap/days").catch(() => null),
       ]);
 
-      setPhases(weeklyRes.data.phases);
-      setCompletedWeeks(weeklyRes.data.completed_weeks || []);
-      setWeekProgressPercentage(weeklyRes.data.progress_percentage || 0);
-      setCompletedCount(weeklyRes.data.completed_count || 0);
+      if (weeklyRes?.data?.phases) {
+        setPhases(weeklyRes.data.phases);
+      }
+      if (weeklyRes?.data?.completed_weeks) {
+        setCompletedWeeks(weeklyRes.data.completed_weeks);
+        setWeekProgressPercentage(weeklyRes.data.progress_percentage || 0);
+        setCompletedCount(weeklyRes.data.completed_count || 0);
+        localStorage.setItem("devbloom_completed_weeks", JSON.stringify(weeklyRes.data.completed_weeks));
+      }
 
-      setDailyTasks(dailyRes.data.days || []);
-      setCompletedDays(dailyRes.data.completed_days || []);
-      setDayProgressPercentage(dailyRes.data.progress_percentage || 0);
-      setCompletedDaysCount(dailyRes.data.completed_count || 0);
+      if (dailyRes?.data?.days && dailyRes.data.days.length > 0) {
+        setDailyTasks(dailyRes.data.days);
+      }
+      if (dailyRes?.data?.completed_days) {
+        setCompletedDays(dailyRes.data.completed_days);
+        setDayProgressPercentage(dailyRes.data.progress_percentage || 0);
+        setCompletedDaysCount(dailyRes.data.completed_count || 0);
+        localStorage.setItem("devbloom_completed_days", JSON.stringify(dailyRes.data.completed_days));
+      }
     } catch (err) {
-      console.error("Failed to fetch roadmap data:", err);
-    } finally {
-      setLoading(false);
+      console.warn("Using offline curriculum data:", err);
     }
   };
 
@@ -82,21 +77,22 @@ export const RoadmapPage: React.FC = () => {
     if (e) e.stopPropagation();
     const nextState = !currentCompleted;
 
-    if (nextState) {
-      setCompletedDays((prev) => [...prev, dayNum]);
-      setCompletedDaysCount((prev) => prev + 1);
-      setDayProgressPercentage(Math.round(((completedDaysCount + 1) / 156) * 100));
+    const nextDays = nextState
+      ? [...completedDays, dayNum]
+      : completedDays.filter((d) => d !== dayNum);
 
+    setCompletedDays(nextDays);
+    setCompletedDaysCount(nextDays.length);
+    setDayProgressPercentage(Math.round((nextDays.length / 156) * 100));
+    localStorage.setItem("devbloom_completed_days", JSON.stringify(nextDays));
+
+    if (nextState) {
       confetti({
         particleCount: 65,
         spread: 60,
         origin: { y: 0.6 },
         colors: ["#10b981", "#3b82f6", "#f59e0b"],
       });
-    } else {
-      setCompletedDays((prev) => prev.filter((d) => d !== dayNum));
-      setCompletedDaysCount((prev) => Math.max(0, prev - 1));
-      setDayProgressPercentage(Math.round(((completedDaysCount - 1) / 156) * 100));
     }
 
     try {
@@ -104,30 +100,30 @@ export const RoadmapPage: React.FC = () => {
         day_number: dayNum,
         is_completed: nextState,
       });
-      await fetchData();
     } catch (err) {
-      console.error("Failed to update day progress:", err);
+      console.warn("Could not sync day completion with server:", err);
     }
   };
 
   const toggleWeekCompletion = async (weekNum: number, currentCompleted: boolean) => {
     const nextState = !currentCompleted;
 
-    if (nextState) {
-      setCompletedWeeks((prev) => [...prev, weekNum]);
-      setCompletedCount((prev) => prev + 1);
-      setWeekProgressPercentage(Math.round(((completedCount + 1) / 26) * 100));
+    const nextWeeks = nextState
+      ? [...completedWeeks, weekNum]
+      : completedWeeks.filter((w) => w !== weekNum);
 
+    setCompletedWeeks(nextWeeks);
+    setCompletedCount(nextWeeks.length);
+    setWeekProgressPercentage(Math.round((nextWeeks.length / 26) * 100));
+    localStorage.setItem("devbloom_completed_weeks", JSON.stringify(nextWeeks));
+
+    if (nextState) {
       confetti({
-        particleCount: 70,
-        spread: 60,
+        particleCount: 80,
+        spread: 70,
         origin: { y: 0.6 },
-        colors: ["#10b981", "#3b82f6", "#f59e0b"],
+        colors: ["#10b981", "#8b5cf6", "#ec4899"],
       });
-    } else {
-      setCompletedWeeks((prev) => prev.filter((w) => w !== weekNum));
-      setCompletedCount((prev) => Math.max(0, prev - 1));
-      setWeekProgressPercentage(Math.round(((completedCount - 1) / 26) * 100));
     }
 
     try {
@@ -135,29 +131,18 @@ export const RoadmapPage: React.FC = () => {
         week_number: weekNum,
         is_completed: nextState,
       });
-      await fetchData();
     } catch (err) {
-      console.error("Failed to update week progress:", err);
+      console.warn("Could not sync week completion with server:", err);
     }
-  };
-
-  const getLeetCodeSearchUrl = (dsaTaskStr: string) => {
-    const cleanStr = dsaTaskStr.replace("LeetCode ", "").replace(/#/g, "").split("—")[0].trim();
-    return `https://leetcode.com/problemset/all/?search=${encodeURIComponent(cleanStr)}`;
   };
 
   const filteredDailyTasks = selectedPhaseFilter === 0
     ? dailyTasks
     : dailyTasks.filter((d) => d.phase === selectedPhaseFilter);
 
-  if (loading && dailyTasks.length === 0) {
-    return (
-      <div className="container" style={{ padding: "60px 20px", textAlign: "center" }}>
-        <Sparkles size={36} className="flame-animated" style={{ color: "var(--color-primary-500)", marginBottom: "12px" }} />
-        <p style={{ color: "var(--color-text-muted)" }}>Loading 180-day calendar & curriculum...</p>
-      </div>
-    );
-  }
+  const filteredPhases = selectedPhaseFilter === 0
+    ? phases
+    : phases.filter((p) => p.phase === selectedPhaseFilter);
 
   return (
     <div className="container" style={{ padding: "32px 20px", display: "flex", flexDirection: "column", gap: "28px" }}>
@@ -172,7 +157,7 @@ export const RoadmapPage: React.FC = () => {
           justifyContent: "space-between",
           flexWrap: "wrap",
           gap: "20px",
-          background: "linear-gradient(135deg, var(--color-glass-bg) 0%, rgba(16,185,129,0.1) 100%)",
+          background: "linear-gradient(135deg, var(--color-glass-bg) 0%, rgba(var(--primary-rgb), 0.1) 100%)",
         }}
       >
         <div style={{ flex: 1, minWidth: "280px" }}>
@@ -250,7 +235,32 @@ export const RoadmapPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Daily Structure Box */}
+      {/* Phase Filter Buttons (Available Across All Views) */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
+        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--color-text-muted)", marginRight: "4px" }}>Filter:</span>
+        <button
+          onClick={() => setSelectedPhaseFilter(0)}
+          className={`btn btn-sm ${selectedPhaseFilter === 0 ? "btn-primary" : "btn-outline"}`}
+          style={{ borderRadius: "9999px", padding: "5px 16px" }}
+        >
+          All Phases ({dailyTasks.length} Days)
+        </button>
+        {[1, 2, 3, 4, 5, 6].map((p) => {
+          const countInPhase = dailyTasks.filter((d) => d.phase === p).length;
+          return (
+            <button
+              key={p}
+              onClick={() => setSelectedPhaseFilter(p)}
+              className={`btn btn-sm ${selectedPhaseFilter === p ? "btn-primary" : "btn-outline"}`}
+              style={{ borderRadius: "9999px", padding: "5px 16px", whiteSpace: "nowrap" }}
+            >
+              Phase {p} ({countInPhase} Days)
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Daily Structure Breakdown Info */}
       <div
         className="glass-panel"
         style={{
@@ -267,7 +277,7 @@ export const RoadmapPage: React.FC = () => {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px" }}>
-          <div style={{ padding: "12px 16px", borderRadius: "12px", backgroundColor: "var(--color-card)", border: "1px solid var(--color-border)" }}>
+          <div style={{ padding: "12px 16px", borderRadius: "12px", backgroundColor: "var(--color-card)", border: "1.5px solid var(--color-border)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 700, color: "#3b82f6" }}>
               <Cpu size={16} /> ~90 min — AI Engineering
             </div>
@@ -276,7 +286,7 @@ export const RoadmapPage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ padding: "12px 16px", borderRadius: "12px", backgroundColor: "var(--color-card)", border: "1px solid var(--color-border)" }}>
+          <div style={{ padding: "12px 16px", borderRadius: "12px", backgroundColor: "var(--color-card)", border: "1.5px solid var(--color-border)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 700, color: "#10b981" }}>
               <Layers size={16} /> ~60–75 min — Full Stack
             </div>
@@ -285,7 +295,7 @@ export const RoadmapPage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ padding: "12px 16px", borderRadius: "12px", backgroundColor: "var(--color-card)", border: "1px solid var(--color-border)" }}>
+          <div style={{ padding: "12px 16px", borderRadius: "12px", backgroundColor: "var(--color-card)", border: "1.5px solid var(--color-border)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 700, color: "#f59e0b" }}>
               <Code2 size={16} /> ~30–45 min — DSA LeetCode
             </div>
@@ -299,26 +309,6 @@ export const RoadmapPage: React.FC = () => {
       {/* Main Content Render */}
       {viewMode === "calendar" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-          <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
-            <button
-              onClick={() => setSelectedPhaseFilter(0)}
-              className={`btn btn-sm ${selectedPhaseFilter === 0 ? "btn-primary" : "btn-outline"}`}
-              style={{ borderRadius: "9999px", padding: "4px 14px" }}
-            >
-              All 180 Days
-            </button>
-            {[1, 2, 3, 4, 5, 6].map((p) => (
-              <button
-                key={p}
-                onClick={() => setSelectedPhaseFilter(p)}
-                className={`btn btn-sm ${selectedPhaseFilter === p ? "btn-primary" : "btn-outline"}`}
-                style={{ borderRadius: "9999px", padding: "4px 14px", whiteSpace: "nowrap" }}
-              >
-                Phase {p}
-              </button>
-            ))}
-          </div>
-
           <div
             style={{
               display: "grid",
@@ -338,8 +328,8 @@ export const RoadmapPage: React.FC = () => {
                     padding: "16px",
                     borderRadius: "18px",
                     cursor: "pointer",
-                    border: isDone ? "2px solid var(--color-primary-500)" : "1px solid var(--color-border)",
-                    backgroundColor: isDone ? "rgba(16,185,129,0.08)" : "var(--color-card)",
+                    border: isDone ? "2px solid var(--color-primary-500)" : "1.5px solid var(--color-border)",
+                    backgroundColor: isDone ? "rgba(var(--primary-rgb), 0.12)" : "var(--color-card)",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",
@@ -405,107 +395,109 @@ export const RoadmapPage: React.FC = () => {
           </div>
         </div>
       ) : viewMode === "daily" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
-            <button onClick={() => setSelectedPhaseFilter(0)} className={`btn btn-sm ${selectedPhaseFilter === 0 ? "btn-primary" : "btn-outline"}`} style={{ borderRadius: "9999px", padding: "4px 14px" }}>
-              All Phases
-            </button>
-            {[1, 2, 3, 4, 5, 6].map((p) => (
-              <button key={p} onClick={() => setSelectedPhaseFilter(p)} className={`btn btn-sm ${selectedPhaseFilter === p ? "btn-primary" : "btn-outline"}`} style={{ borderRadius: "9999px", padding: "4px 14px", whiteSpace: "nowrap" }}>
-                Phase {p}
-              </button>
-            ))}
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {filteredDailyTasks.map((d) => {
+            const isDone = completedDays.includes(d.day);
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {filteredDailyTasks.map((d) => {
-              const isDone = completedDays.includes(d.day);
-
-              return (
-                <div
-                  key={d.day}
-                  className="glass-panel"
+            return (
+              <div
+                key={d.day}
+                className="glass-panel"
+                style={{
+                  padding: "20px 24px",
+                  borderRadius: "18px",
+                  border: isDone ? "2px solid var(--color-primary-500)" : "1.5px solid var(--color-border)",
+                  backgroundColor: isDone ? "rgba(var(--primary-rgb), 0.08)" : "var(--color-card)",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "18px",
+                }}
+              >
+                <button
+                  onClick={(e) => toggleDayCompletion(d.day, isDone, e)}
                   style={{
-                    padding: "20px 24px",
-                    borderRadius: "18px",
-                    border: isDone ? "1px solid var(--color-primary-500)" : "1px solid var(--color-border)",
-                    backgroundColor: isDone ? "rgba(16,185,129,0.06)" : "var(--color-card)",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "18px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: 0,
+                    color: isDone ? "var(--color-primary-500)" : "var(--color-text-muted)",
+                    marginTop: "4px",
                   }}
+                  title={isDone ? "Mark day incomplete" : "Tick off day as complete"}
                 >
-                  <button
-                    onClick={(e) => toggleDayCompletion(d.day, isDone, e)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      padding: 0,
-                      color: isDone ? "var(--color-primary-500)" : "var(--color-text-muted)",
-                      marginTop: "4px",
-                    }}
-                    title={isDone ? "Mark day incomplete" : "Tick off day as complete"}
-                  >
-                    {isDone ? <CheckCircle2 size={26} /> : <Circle size={26} />}
-                  </button>
+                  {isDone ? <CheckCircle2 size={26} /> : <Circle size={26} />}
+                </button>
 
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <span className="badge badge-primary" style={{ padding: "4px 12px", fontSize: "0.8rem" }}>
-                          Day {d.day} (Week {d.week})
-                        </span>
-                        <h3 style={{ fontSize: "1.1rem", color: "var(--color-text)" }}>{d.title}</h3>
-                      </div>
-                      <span className="badge badge-outline" style={{ fontSize: "0.72rem" }}>
-                        {d.phase_title}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span className={`badge ${isDone ? "badge-primary" : "badge-outline"}`}>
+                        Day {d.day}
+                      </span>
+                      <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontWeight: 600 }}>
+                        Week {d.week} • {d.phase_title}
                       </span>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "0.88rem" }}>
-                      <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(59,130,246,0.1)", borderLeft: "3px solid #3b82f6" }}>
-                        <strong style={{ color: "#3b82f6", display: "block", marginBottom: "2px" }}>
-                          🎥 ~90 min AI Engineering Action:
-                        </strong>
-                        <span style={{ color: "var(--color-text)", lineHeight: 1.4 }}>{d.ai_eng_task}</span>
-                      </div>
+                    <button
+                      onClick={() => setSelectedDayDetail(d)}
+                      className="btn btn-sm btn-outline"
+                      style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                    >
+                      <Eye size={14} /> Full Details
+                    </button>
+                  </div>
 
-                      <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(16,185,129,0.1)", borderLeft: "3px solid #10b981" }}>
-                        <strong style={{ color: "#10b981", display: "block", marginBottom: "2px" }}>
-                          💻 ~60 min Full Stack Web Action:
-                        </strong>
-                        <span style={{ color: "var(--color-text)", lineHeight: 1.4 }}>{d.full_stack_task}</span>
-                      </div>
+                  <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
+                    {d.title}
+                  </h3>
 
-                      <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(245,158,11,0.1)", borderLeft: "3px solid #f59e0b" }}>
-                        <strong style={{ color: "#f59e0b", display: "block", marginBottom: "2px" }}>
-                          🧩 ~30 min Timed DSA Problem:
-                        </strong>
-                        <a
-                          href={getLeetCodeSearchUrl(d.dsa_task)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: "#f59e0b", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px", marginLeft: "4px" }}
-                        >
-                          {d.dsa_task} <ExternalLink size={14} />
-                        </a>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px", fontSize: "0.85rem" }}>
+                    <div style={{ padding: "10px 12px", borderRadius: "10px", backgroundColor: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
+                      <div style={{ fontWeight: 700, color: "#3b82f6", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                        <Cpu size={14} /> AI Engineering (~90m)
                       </div>
+                      <div style={{ color: "var(--color-text)", fontSize: "0.8rem", lineHeight: 1.4 }}>
+                        {d.ai_eng_task}
+                      </div>
+                    </div>
 
-                      <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid var(--color-border)" }}>
-                        <strong style={{ color: "var(--color-primary-500)" }}>🎯 Project Deliverable Step:</strong>{" "}
-                        <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{d.checkpoint_step}</span>
+                    <div style={{ padding: "10px 12px", borderRadius: "10px", backgroundColor: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                      <div style={{ fontWeight: 700, color: "#10b981", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                        <Layers size={14} /> Full Stack Web (~60m)
                       </div>
+                      <div style={{ color: "var(--color-text)", fontSize: "0.8rem", lineHeight: 1.4 }}>
+                        {d.full_stack_task}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: "10px 12px", borderRadius: "10px", backgroundColor: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)" }}>
+                      <div style={{ fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                        <Code2 size={14} /> DSA LeetCode (~30m)
+                      </div>
+                      <a
+                        href={`https://leetcode.com/problemset/all/?search=${encodeURIComponent(d.dsa_task.replace(/LeetCode #\d+ — /g, "").split("(")[0].trim())}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "#f59e0b", fontSize: "0.8rem", fontWeight: 700, textDecoration: "underline", display: "flex", alignItems: "center", gap: "4px" }}
+                      >
+                        {d.dsa_task} <ExternalLink size={14} />
+                      </a>
+                    </div>
+
+                    <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(0,0,0,0.15)", border: "1.5px solid var(--color-border)" }}>
+                      <strong style={{ color: "var(--color-primary-500)" }}>🎯 Project Deliverable Step:</strong>{" "}
+                      <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{d.checkpoint_step}</span>
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          {phases.map((p) => {
+          {filteredPhases.map((p) => {
             const isExpanded = expandedPhases[p.phase] ?? true;
             const completedInPhase = p.weeks.filter((w) => completedWeeks.includes(w.week)).length;
 
@@ -516,7 +508,7 @@ export const RoadmapPage: React.FC = () => {
                 style={{
                   borderRadius: "20px",
                   overflow: "hidden",
-                  border: "1px solid var(--color-border)",
+                  border: "1.5px solid var(--color-border)",
                 }}
               >
                 <div
@@ -562,8 +554,8 @@ export const RoadmapPage: React.FC = () => {
                           style={{
                             padding: "18px 20px",
                             borderRadius: "16px",
-                            backgroundColor: isDone ? "rgba(16,185,129,0.06)" : "var(--color-card)",
-                            border: isDone ? "1px solid var(--color-primary-500)" : "1px solid var(--color-border)",
+                            backgroundColor: isDone ? "rgba(var(--primary-rgb), 0.08)" : "var(--color-card)",
+                            border: isDone ? "2px solid var(--color-primary-500)" : "1.5px solid var(--color-border)",
                             display: "flex",
                             alignItems: "flex-start",
                             gap: "16px",
@@ -579,37 +571,46 @@ export const RoadmapPage: React.FC = () => {
                               color: isDone ? "var(--color-primary-500)" : "var(--color-text-muted)",
                               marginTop: "2px",
                             }}
+                            title={isDone ? "Mark week incomplete" : "Tick off week as complete"}
                           >
                             {isDone ? <CheckCircle2 size={24} /> : <Circle size={24} />}
                           </button>
 
-                          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "10px" }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-                              <span style={{ fontWeight: 800, fontSize: "1rem", color: "var(--color-text)" }}>
+                          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <h4 style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--color-text)" }}>
                                 Week {w.week}
-                              </span>
-                              <span className={`badge ${isDone ? "badge-primary" : "badge-outline"}`} style={{ fontSize: "0.72rem" }}>
-                                {isDone ? "Completed" : "In Progress"}
+                              </h4>
+                              <span className={`badge ${isDone ? "badge-primary" : "badge-outline"}`} style={{ fontSize: "0.75rem" }}>
+                                {isDone ? "✓ Week Complete" : "In Progress"}
                               </span>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", fontSize: "0.85rem" }}>
-                              <div>
-                                <strong style={{ color: "#3b82f6" }}>🤖 AI Engineering:</strong>
-                                <p style={{ color: "var(--color-text)", marginTop: "2px", lineHeight: 1.4 }}>{w.ai_eng}</p>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", fontSize: "0.85rem", marginTop: "4px" }}>
+                              <div style={{ padding: "8px 12px", borderRadius: "10px", backgroundColor: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
+                                <div style={{ fontWeight: 700, color: "#3b82f6", display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                                  <Cpu size={14} /> AI Engineering
+                                </div>
+                                <div style={{ color: "var(--color-text)", fontSize: "0.8rem" }}>{w.ai_eng}</div>
                               </div>
-                              <div>
-                                <strong style={{ color: "#10b981" }}>⚡ Full Stack:</strong>
-                                <p style={{ color: "var(--color-text)", marginTop: "2px", lineHeight: 1.4 }}>{w.full_stack}</p>
+
+                              <div style={{ padding: "8px 12px", borderRadius: "10px", backgroundColor: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                                <div style={{ fontWeight: 700, color: "#10b981", display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                                  <Layers size={14} /> Full Stack Web
+                                </div>
+                                <div style={{ color: "var(--color-text)", fontSize: "0.8rem" }}>{w.full_stack}</div>
                               </div>
-                              <div>
-                                <strong style={{ color: "#f59e0b" }}>🧩 DSA Pattern:</strong>
-                                <p style={{ color: "var(--color-text)", marginTop: "2px", lineHeight: 1.4 }}>{w.dsa}</p>
+
+                              <div style={{ padding: "8px 12px", borderRadius: "10px", backgroundColor: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)" }}>
+                                <div style={{ fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                                  <Code2 size={14} /> DSA Target
+                                </div>
+                                <div style={{ color: "var(--color-text)", fontSize: "0.8rem" }}>{w.dsa}</div>
                               </div>
                             </div>
 
-                            <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(0,0,0,0.15)", border: "1px solid var(--color-border)", fontSize: "0.85rem" }}>
-                              <strong style={{ color: "var(--color-primary-500)" }}>🎯 Weekly Checkpoint:</strong>{" "}
+                            <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(0,0,0,0.15)", border: "1.5px solid var(--color-border)", fontSize: "0.85rem", marginTop: "4px" }}>
+                              <strong style={{ color: "var(--color-primary-500)" }}>🎯 Weekly Checkpoint Project:</strong>{" "}
                               <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{w.checkpoint}</span>
                             </div>
                           </div>
@@ -624,7 +625,7 @@ export const RoadmapPage: React.FC = () => {
         </div>
       )}
 
-      {/* Day Detail Modal */}
+      {/* Daily Task Detail Modal */}
       {selectedDayDetail && (
         <div
           style={{
@@ -634,7 +635,7 @@ export const RoadmapPage: React.FC = () => {
             right: 0,
             bottom: 0,
             backgroundColor: "rgba(0,0,0,0.75)",
-            backdropFilter: "blur(8px)",
+            backdropFilter: "blur(10px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -645,73 +646,107 @@ export const RoadmapPage: React.FC = () => {
         >
           <div
             className="glass-panel animate-fade-in"
-            style={{ width: "100%", maxWidth: "600px", padding: "28px", borderRadius: "24px" }}
+            style={{
+              width: "100%",
+              maxWidth: "680px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              padding: "28px",
+              borderRadius: "24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "20px",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <span className="badge badge-primary" style={{ fontSize: "0.9rem", padding: "6px 14px" }}>
                   Day {selectedDayDetail.day}
                 </span>
-                <h3 style={{ fontSize: "1.2rem", color: "var(--color-text)" }}>{selectedDayDetail.title}</h3>
+                <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", fontWeight: 600 }}>
+                  Week {selectedDayDetail.week} • {selectedDayDetail.phase_title}
+                </span>
               </div>
 
-              <button onClick={() => setSelectedDayDetail(null)} className="btn btn-sm btn-outline" style={{ borderRadius: "50%", width: "36px", height: "36px", padding: 0 }}>
-                <X size={20} />
+              <button
+                onClick={() => setSelectedDayDetail(null)}
+                className="btn btn-sm btn-outline"
+                style={{ borderRadius: "50%", width: "36px", height: "36px", padding: 0 }}
+              >
+                <X size={18} />
               </button>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px", fontSize: "0.9rem" }}>
-              <div style={{ padding: "14px", borderRadius: "12px", backgroundColor: "rgba(59,130,246,0.12)", borderLeft: "4px solid #3b82f6" }}>
-                <strong style={{ color: "#3b82f6", display: "block", marginBottom: "4px" }}>
-                  🎥 ~90 min AI Engineering Action Plan:
-                </strong>
-                <p style={{ color: "var(--color-text)", lineHeight: 1.5 }}>{selectedDayDetail.ai_eng_task}</p>
+            <div>
+              <h2 style={{ fontSize: "1.35rem", color: "var(--color-text)", fontWeight: 800 }}>
+                {selectedDayDetail.title}
+              </h2>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ padding: "16px", borderRadius: "14px", backgroundColor: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.25)" }}>
+                <div style={{ fontWeight: 700, color: "#3b82f6", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.92rem", marginBottom: "6px" }}>
+                  <Cpu size={16} /> AI Engineering (~90 min)
+                </div>
+                <div style={{ color: "var(--color-text)", fontSize: "0.88rem", lineHeight: 1.5 }}>
+                  {selectedDayDetail.ai_eng_task}
+                </div>
               </div>
 
-              <div style={{ padding: "14px", borderRadius: "12px", backgroundColor: "rgba(16,185,129,0.12)", borderLeft: "4px solid #10b981" }}>
-                <strong style={{ color: "#10b981", display: "block", marginBottom: "4px" }}>
-                  💻 ~60 min Full Stack Web Action Plan:
-                </strong>
-                <p style={{ color: "var(--color-text)", lineHeight: 1.5 }}>{selectedDayDetail.full_stack_task}</p>
+              <div style={{ padding: "16px", borderRadius: "14px", backgroundColor: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)" }}>
+                <div style={{ fontWeight: 700, color: "#10b981", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.92rem", marginBottom: "6px" }}>
+                  <Layers size={16} /> Full Stack Web (~60–75 min)
+                </div>
+                <div style={{ color: "var(--color-text)", fontSize: "0.88rem", lineHeight: 1.5 }}>
+                  {selectedDayDetail.full_stack_task}
+                </div>
               </div>
 
-              <div style={{ padding: "14px", borderRadius: "12px", backgroundColor: "rgba(245,158,11,0.12)", borderLeft: "4px solid #f59e0b" }}>
-                <strong style={{ color: "#f59e0b", display: "block", marginBottom: "4px" }}>
-                  🧩 ~30 min Timed DSA LeetCode Target:
-                </strong>
+              <div style={{ padding: "16px", borderRadius: "14px", backgroundColor: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.25)" }}>
+                <div style={{ fontWeight: 700, color: "#f59e0b", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.92rem", marginBottom: "6px" }}>
+                  <Code2 size={16} /> DSA Problem (~30–45 min)
+                </div>
+                <div style={{ color: "var(--color-text)", fontSize: "0.88rem", lineHeight: 1.5, marginBottom: "8px" }}>
+                  {selectedDayDetail.dsa_task}
+                </div>
                 <a
-                  href={getLeetCodeSearchUrl(selectedDayDetail.dsa_task)}
+                  href={`https://leetcode.com/problemset/all/?search=${encodeURIComponent(selectedDayDetail.dsa_task.replace(/LeetCode #\d+ — /g, "").split("(")[0].trim())}`}
                   target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "#f59e0b", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "2px" }}
+                  rel="noreferrer"
+                  className="btn btn-sm btn-outline"
+                  style={{ display: "inline-flex", gap: "6px", alignItems: "center", fontSize: "0.78rem" }}
                 >
-                  {selectedDayDetail.dsa_task} <ExternalLink size={16} />
+                  Solve on LeetCode <ExternalLink size={14} />
                 </a>
               </div>
 
-              <div style={{ padding: "14px", borderRadius: "12px", backgroundColor: "rgba(0,0,0,0.2)", border: "1px solid var(--color-border)" }}>
-                <strong style={{ color: "var(--color-primary-500)", display: "block", marginBottom: "2px" }}>
-                  🎯 Project Deliverable Checkpoint Step:
-                </strong>
-                <p style={{ color: "var(--color-text)", fontWeight: 600 }}>{selectedDayDetail.checkpoint_step}</p>
+              <div style={{ padding: "16px", borderRadius: "14px", backgroundColor: "rgba(0,0,0,0.2)", border: "1.5px solid var(--color-border)" }}>
+                <div style={{ fontWeight: 700, color: "var(--color-primary-500)", fontSize: "0.92rem", marginBottom: "6px" }}>
+                  🎯 Project Deliverable Checkpoint:
+                </div>
+                <div style={{ color: "var(--color-text)", fontSize: "0.88rem", lineHeight: 1.5 }}>
+                  {selectedDayDetail.checkpoint_step}
+                </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "12px", borderTop: "1px solid var(--color-border)" }}>
               <button
-                onClick={(e) => {
-                  const isDone = completedDays.includes(selectedDayDetail.day);
-                  toggleDayCompletion(selectedDayDetail.day, isDone, e);
-                }}
-                className={`btn ${completedDays.includes(selectedDayDetail.day) ? "btn-secondary" : "btn-primary"}`}
+                onClick={() => setSelectedDayDetail(null)}
+                className="btn btn-outline"
               >
-                <CheckSquare size={18} />
-                {completedDays.includes(selectedDayDetail.day) ? "Mark Incomplete" : "Tick Off as Completed"}
+                Close
               </button>
 
-              <button onClick={() => setSelectedDayDetail(null)} className="btn btn-outline">
-                Close
+              <button
+                onClick={(e) => {
+                  toggleDayCompletion(selectedDayDetail.day, completedDays.includes(selectedDayDetail.day), e);
+                  setSelectedDayDetail(null);
+                }}
+                className={`btn ${completedDays.includes(selectedDayDetail.day) ? "btn-outline" : "btn-primary"}`}
+              >
+                {completedDays.includes(selectedDayDetail.day) ? "Mark Incomplete" : "✓ Mark Day Completed"}
               </button>
             </div>
           </div>
