@@ -1,9 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional
-import re
-
-GITHUB_URL_REGEX = r"^https?:\/\/(www\.)?github\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+(\/)?$"
 
 class ProjectSubmissionCreate(BaseModel):
     day_number: int = Field(..., ge=1, le=1000)
@@ -14,9 +11,10 @@ class ProjectSubmissionCreate(BaseModel):
     @classmethod
     def validate_github_url(cls, v: str) -> str:
         v = v.strip()
-        if not re.match(GITHUB_URL_REGEX, v, re.IGNORECASE):
-            if "github.com/" not in v.lower():
-                raise ValueError("Must be a valid GitHub repository URL (e.g. https://github.com/username/repository)")
+        if not v.startswith("http://") and not v.startswith("https://"):
+            v = f"https://{v}"
+        if "github.com" not in v.lower():
+            raise ValueError("Must be a valid GitHub URL (e.g. https://github.com/username/repository)")
         return v
 
 class ProjectSubmissionUpdate(BaseModel):
@@ -30,8 +28,10 @@ class ProjectSubmissionUpdate(BaseModel):
         if v is None:
             return v
         v = v.strip()
-        if "github.com/" not in v.lower():
-            raise ValueError("Must be a valid GitHub repository URL")
+        if not v.startswith("http://") and not v.startswith("https://"):
+            v = f"https://{v}"
+        if "github.com" not in v.lower():
+            raise ValueError("Must be a valid GitHub URL")
         return v
 
 class ProjectSubmissionOut(BaseModel):

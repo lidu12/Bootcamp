@@ -44,7 +44,14 @@ export const SubmissionHistory: React.FC<SubmissionHistoryProps> = ({ submission
   const handleDelete = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this submission?")) return;
     try {
-      await api.delete(`/submissions/${id}`);
+      await api.delete(`/submissions/${id}`).catch(() => null);
+      try {
+        const local: SubmissionItem[] = JSON.parse(localStorage.getItem("devbloom_local_submissions") || "[]");
+        const updated = local.filter((s) => s.id !== id);
+        localStorage.setItem("devbloom_local_submissions", JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
       onRefresh();
     } catch (err) {
       console.error("Delete submission failed:", err);

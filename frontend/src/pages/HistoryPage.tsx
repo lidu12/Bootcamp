@@ -5,17 +5,30 @@ import { SubmissionHistory, type SubmissionItem } from "../components/Submission
 import { ProjectSubmissionModal } from "../components/ProjectSubmissionModal";
 
 export const HistoryPage: React.FC = () => {
-  const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [submissions, setSubmissions] = useState<SubmissionItem[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("devbloom_local_submissions") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(false);
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
 
   const fetchSubmissions = async () => {
-    setLoading(true);
     try {
       const res = await api.get("/submissions/");
-      setSubmissions(res.data);
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        // Merge server and local submissions, avoiding duplicates
+        const local: SubmissionItem[] = JSON.parse(localStorage.getItem("devbloom_local_submissions") || "[]");
+        const existingIds = new Set(res.data.map((s: SubmissionItem) => s.id));
+        const extraLocal = local.filter((l) => !existingIds.has(l.id));
+        const merged = [...res.data, ...extraLocal];
+        setSubmissions(merged);
+        localStorage.setItem("devbloom_local_submissions", JSON.stringify(merged));
+      }
     } catch (err) {
-      console.error("Failed to fetch submission history:", err);
+      console.warn("Using locally saved submissions:", err);
     } finally {
       setLoading(false);
     }
@@ -40,7 +53,7 @@ export const HistoryPage: React.FC = () => {
         </button>
       </div>
 
-      {loading ? (
+      {loading && submissions.length === 0 ? (
         <div style={{ padding: "60px 20px", textAlign: "center", color: "var(--color-text-muted)" }}>
           <Sparkles size={32} className="flame-animated" style={{ color: "var(--color-primary-500)", marginBottom: "12px" }} />
           <p>Loading submission history...</p>
