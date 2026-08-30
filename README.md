@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <a href="https://bootcamp-r0i8.onrender.com" target="_blank">
-    <img src="https://img.shields.io/badge/Render-Live_Demo-46E3B7?style=for-the-badge&logo=render&logoColor=white" alt="Render Live Demo" />
+  <a href="https://bootcamp-1-m9rk.onrender.com" target="_blank">
+    <img src="https://img.shields.io/badge/Render-Live_App-46E3B7?style=for-the-badge&logo=render&logoColor=white" alt="Render Live App" />
   </a>
   <img src="https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi" alt="FastAPI" />
   <img src="https://img.shields.io/badge/Python_3.11-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
@@ -16,7 +16,8 @@
 </p>
 
 <p align="center">
-  🚀 <strong>Live Deployment:</strong> <a href="https://bootcamp-r0i8.onrender.com" target="_blank">https://bootcamp-r0i8.onrender.com</a>
+  🌐 <strong>Live Web App:</strong> <a href="https://bootcamp-1-m9rk.onrender.com" target="_blank">https://bootcamp-1-m9rk.onrender.com</a> &nbsp;|&nbsp;
+  📚 <strong>API Docs:</strong> <a href="https://bootcamp-r0i8.onrender.com/docs" target="_blank">https://bootcamp-r0i8.onrender.com/docs</a>
 </p>
 
 ---
