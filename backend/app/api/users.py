@@ -11,15 +11,26 @@ from app.core.streak_logic import compute_streak_stats
 router = APIRouter(prefix="/users", tags=["users"])
 
 @router.get("/profile", response_model=UserOut)
+@router.get("/me", response_model=UserOut)
 def get_user_profile(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.put("/profile", response_model=UserOut)
+@router.patch("/profile", response_model=UserOut)
+@router.patch("/me", response_model=UserOut)
 def update_user_profile(
     user_in: UserUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    if user_in.username is not None and user_in.username.strip():
+        new_username = user_in.username.strip()
+        # Check if username is already taken by another user
+        existing = db.query(User).filter(User.username == new_username, User.id != current_user.id).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="This username is already taken by another user.")
+        current_user.username = new_username
+        
     if user_in.bio is not None:
         current_user.bio = user_in.bio
     if user_in.timezone is not None:

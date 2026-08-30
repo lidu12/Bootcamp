@@ -17,6 +17,7 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):
+    username: Optional[str] = None
     bio: Optional[str] = None
     timezone: Optional[str] = None
     preferred_theme: Optional[str] = None

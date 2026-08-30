@@ -19,37 +19,47 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
   register: (user: string, email: string, pass: string) => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
+  updateProfile: (data: Partial<User>) => Promise<User>;
   logout: () => void;
   refetchUser: () => Promise<void>;
 }
 
-const DEFAULT_LOCAL_USER: User = {
-  id: 1,
-  email: "dev@devbloom.local",
-  username: "developer",
-  bio: "Full-Stack & AI Engineering Bootcamp Learner",
-  timezone: "UTC",
-  preferred_theme: "emerald-bloom",
-  is_dark_mode: true,
-  streak_freezes_available: 1,
-  streak_freezes_used: 0,
-  created_at: new Date().toISOString(),
+const getSavedLocalUser = (): User => {
+  try {
+    const saved = localStorage.getItem("devbloom_cached_user");
+    if (saved) return JSON.parse(saved);
+  } catch {
+    // ignore
+  }
+  return {
+    id: 1,
+    email: "dev@devbloom.local",
+    username: "developer",
+    bio: "Full-Stack & AI Engineering Bootcamp Learner",
+    timezone: "UTC",
+    preferred_theme: "rose-gold-champagne",
+    is_dark_mode: true,
+    streak_freezes_available: 1,
+    streak_freezes_used: 0,
+    created_at: new Date().toISOString(),
+  };
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(DEFAULT_LOCAL_USER);
+  const [user, setUser] = useState<User | null>(getSavedLocalUser());
   const [loading, setLoading] = useState(false);
 
   const fetchCurrentUser = async () => {
     try {
-      const res = await api.get("/auth/me");
-      setUser(res.data);
-    } catch (err) {
-      console.warn("Failed to fetch user from server, using local default:", err);
-      setUser(DEFAULT_LOCAL_USER);
+      const res = await api.get("/users/profile");
+      if (res.data) {
+        setUser(res.data);
+        localStorage.setItem("devbloom_cached_user", JSON.stringify(res.data));
+      }
+    } catch {
+      // fallback to cached user
     } finally {
       setLoading(false);
     }
@@ -60,24 +70,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async () => {
-    setUser(DEFAULT_LOCAL_USER);
+    await fetchCurrentUser();
   };
 
   const register = async () => {
-    setUser(DEFAULT_LOCAL_USER);
+    await fetchCurrentUser();
   };
 
-  const updateProfile = async (data: Partial<User>) => {
+  const updateProfile = async (data: Partial<User>): Promise<User> => {
+    let updatedUser: User;
     try {
-      const res = await api.patch("/users/me", data);
-      setUser(res.data);
-    } catch (err) {
-      setUser((prev) => (prev ? { ...prev, ...data } : DEFAULT_LOCAL_USER));
+      const res = await api.put("/users/profile", data);
+      updatedUser = res.data;
+    } catch {
+      // Offline fallback
+      updatedUser = {
+        ...(user || getSavedLocalUser()),
+        ...data,
+      } as User;
     }
+    setUser(updatedUser);
+    localStorage.setItem("devbloom_cached_user", JSON.stringify(updatedUser));
+    return updatedUser;
   };
 
   const logout = () => {
-    setUser(DEFAULT_LOCAL_USER);
+    localStorage.removeItem("devbloom_token");
+    localStorage.removeItem("devbloom_cached_user");
+    setUser(getSavedLocalUser());
   };
 
   return (

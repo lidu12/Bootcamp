@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { User as UserIcon, Palette, Check, Save, Type } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { User as UserIcon, Palette, Check, Save, Type, AlertCircle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { THEMES } from "../theme/themes";
@@ -9,25 +9,43 @@ export const SettingsPage: React.FC = () => {
   const { user, updateProfile } = useAuth();
   const { activeTheme, shadeMode, setShadeMode, activeFont, activeFontSize, setTheme, setFont, setFontSize } = useTheme();
 
+  const [username, setUsername] = useState(user?.username || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [timezone, setTimezone] = useState(user?.timezone || "UTC");
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      setUsername(user.username || "");
+      setBio(user.bio || "");
+      setTimezone(user.timezone || "UTC");
+    }
+  }, [user]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim()) {
+      setErrorMessage("Username cannot be empty.");
+      return;
+    }
+
     setSaving(true);
     setSavedSuccess(false);
+    setErrorMessage("");
 
     try {
       await updateProfile({
+        username: username.trim(),
         bio,
         timezone,
       });
       setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    } catch (err) {
+      setTimeout(() => setSavedSuccess(false), 3500);
+    } catch (err: any) {
       console.error("Failed to update profile settings:", err);
+      setErrorMessage(err.response?.data?.detail || "Failed to update profile. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -49,9 +67,9 @@ export const SettingsPage: React.FC = () => {
         }}
       >
         <div>
-          <h1 style={{ fontSize: "1.6rem", color: "var(--color-text)", fontWeight: 800 }}>Preferences & Typography Settings</h1>
+          <h1 style={{ fontSize: "1.6rem", color: "var(--color-text)", fontWeight: 800 }}>Preferences & Developer Settings</h1>
           <p style={{ fontSize: "0.88rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
-            Customize your aesthetic theme, font family (Times New Roman, Calibri, Inter, etc.), and font sizes
+            Customize your developer name, aesthetic themes (Dark, Medium, Light), and typography
           </p>
         </div>
       </div>
@@ -65,9 +83,22 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <form onSubmit={handleSaveProfile} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {errorMessage && (
+              <div style={{ padding: "10px 14px", borderRadius: "10px", backgroundColor: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "#ef4444", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                <AlertCircle size={16} /> {errorMessage}
+              </div>
+            )}
+
             <div className="form-group">
-              <label className="form-label">Username</label>
-              <input type="text" disabled className="form-input" value={user?.username || "developer"} style={{ opacity: 0.7 }} />
+              <label className="form-label">Developer Username / Name</label>
+              <input
+                type="text"
+                className="form-input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your name or username..."
+                required
+              />
             </div>
 
             <div className="form-group">
@@ -97,7 +128,7 @@ export const SettingsPage: React.FC = () => {
               <button type="submit" disabled={saving} className="btn btn-primary">
                 <Save size={16} /> {saving ? "Saving..." : "Save Profile"}
               </button>
-              {savedSuccess && <span style={{ color: "var(--color-primary-500)", fontSize: "0.85rem", fontWeight: 700 }}>✓ Settings Saved!</span>}
+              {savedSuccess && <span style={{ color: "var(--color-primary-500)", fontSize: "0.85rem", fontWeight: 700 }}>✓ Profile Saved!</span>}
             </div>
           </form>
         </div>
@@ -110,22 +141,26 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Font Family / Style</label>
-            <select className="form-select" value={activeFont.id} onChange={(e) => setFont(e.target.value)}>
+            <label className="form-label">Active Font Family</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {FONT_OPTIONS.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFont(f.id)}
+                  className={`btn btn-sm ${activeFont.id === f.id ? "btn-primary" : "btn-outline"}`}
+                  style={{ justifyContent: "space-between", fontFamily: f.family, padding: "8px 14px" }}
+                >
+                  <span>{f.name}</span>
+                  {activeFont.id === f.id && <Check size={16} />}
+                </button>
               ))}
-            </select>
-            <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", marginTop: "4px" }}>
-              Selected Font: <strong style={{ color: "var(--color-text)", fontFamily: activeFont.family }}>{activeFont.name}</strong>
-            </p>
+            </div>
           </div>
 
           <div className="form-group">
             <label className="form-label">Base Font Size</label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
               {FONT_SIZE_OPTIONS.map((s) => (
                 <button
                   key={s.id}
@@ -190,26 +225,22 @@ export const SettingsPage: React.FC = () => {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <span style={{ fontWeight: 700, fontSize: "0.92rem", color: "var(--color-text)" }}>{t.name}</span>
-                    <span style={{ display: "block", fontSize: "0.72rem", color: "var(--color-primary-500)", fontWeight: 600 }}>{t.category}</span>
-                  </div>
-                  {isSelected && <Check size={16} style={{ color: "var(--color-primary-500)" }} />}
+                  <span style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--color-text)" }}>{t.name}</span>
+                  {isSelected && <Check size={18} style={{ color: "var(--color-primary-500)" }} />}
                 </div>
 
-                {t.vibe && (
-                  <p style={{ fontSize: "0.76rem", color: "var(--color-text-muted)", lineHeight: 1.4, margin: 0 }}>
-                    {t.vibe}
-                  </p>
-                )}
+                <p style={{ fontSize: "0.76rem", color: "var(--color-text-muted)", lineHeight: 1.35 }}>
+                  {t.vibe}
+                </p>
 
-                <div style={{ display: "flex", height: "20px", borderRadius: "6px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)", marginTop: "auto" }}>
-                  <div style={{ flex: 1, backgroundColor: t.colors[50] }} />
-                  <div style={{ flex: 1, backgroundColor: t.colors[100] }} />
-                  <div style={{ flex: 1, backgroundColor: t.colors[300] }} />
-                  <div style={{ flex: 1, backgroundColor: t.colors[500] }} />
-                  <div style={{ flex: 1, backgroundColor: t.colors[700] }} />
-                  <div style={{ flex: 1, backgroundColor: t.colors[900] }} />
+                {/* 6-shade color palette scale */}
+                <div style={{ display: "flex", height: "18px", borderRadius: "6px", overflow: "hidden", border: "1px solid var(--color-border)", marginTop: "auto" }}>
+                  <div style={{ flex: 1, backgroundColor: t.colors[50] }} title="50 Light" />
+                  <div style={{ flex: 1, backgroundColor: t.colors[100] }} title="100 Soft" />
+                  <div style={{ flex: 1, backgroundColor: t.colors[300] }} title="300 Pastel" />
+                  <div style={{ flex: 1, backgroundColor: t.colors[500] }} title="500 Brand" />
+                  <div style={{ flex: 1, backgroundColor: t.colors[700] }} title="700 Deep" />
+                  <div style={{ flex: 1, backgroundColor: t.colors[900] }} title="900 Rich Text" />
                 </div>
               </div>
             );
